@@ -551,8 +551,6 @@ class DocTagsDocument(BaseModel):
             raise ValueError("Number of page doctags must be equal to page images!")
         doctags_doc = cls()
 
-        # if images is None:
-        #     images = [None] * len(doctags)
         imgs: List[Optional[Union[Path, PILImage.Image]]] = (
             typing.cast(List[Optional[Union[Path, PILImage.Image]]], images)
             if images is not None
