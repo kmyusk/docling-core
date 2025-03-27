@@ -157,7 +157,10 @@ def validate_doctags(input_dt: str):
     row = Forward()
     cell = Forward()
     page = Forward()
-    tablecaption = Forward()
+    caption = Forward()
+    pictureitem = Forward()
+    picclass = Forward()
+    smiles = Forward()
 
     start <<= (
         Literal(f"<{DocumentToken.DOCUMENT.value}>")
@@ -166,7 +169,7 @@ def validate_doctags(input_dt: str):
     )
     page <<= OneOrMore(docitem)
     body <<= delimitedList(page, delim=Literal(f"<{DocumentToken.PAGE_BREAK.value}>"))
-    docitem <<= textitem | tableitem
+    docitem <<= textitem | tableitem | pictureitem
     text_label_items = [
         Literal(f"<{DocumentToken.create_token_name_from_doc_item_label(label)}>")
         + Optional(textbody)
@@ -191,14 +194,15 @@ def validate_doctags(input_dt: str):
         )
     )
     loctag <<= MatchFirst(loctags)
+
     tableitem <<= (
         Literal("<otsl>")
         + Optional(loctag + loctag + loctag + loctag)
         + Optional(tablebody)
-        + Optional(Literal(TableToken.OTSL_NL.value) + tablecaption)
+        + Optional(Literal(TableToken.OTSL_NL.value) + caption)
         + Literal("</otsl>")
     )
-    tablecaption <<= (
+    caption <<= (
         Literal("<caption>")
         + Optional(loctag + loctag + loctag + loctag)
         + Literal("Content</caption>")
@@ -211,6 +215,19 @@ def validate_doctags(input_dt: str):
         if tok != TableToken.OTSL_NL.value
     ]
     cell <<= MatchFirst(celltags)
+
+    pictureitem <<= (
+        Literal(f"<{DocumentToken.PICTURE.value}>")
+        + Optional(loctag + loctag + loctag + loctag)
+        + Optional(picclass)
+        + Optional(smiles)
+        + Optional(caption)
+        + Literal(f"</{DocumentToken.PICTURE.value}>")
+    )
+
+    picclass <<= MatchFirst(
+        [pclass.value for pclass in tokens._PictureClassificationToken]
+    )
 
     def is_valid(s):
         try:
