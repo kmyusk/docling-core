@@ -5,12 +5,14 @@
 
 """Test the pydantic models in package utils."""
 import json
+from pathlib import Path
 
 from pydantic import Field
 from requests import Response
 
 from docling_core.utils.alias import AliasModel
 from docling_core.utils.file import resolve_source_to_path, resolve_source_to_stream
+from docling_core.utils.validators import validate_doctags
 
 
 def test_alias_model():
@@ -92,3 +94,9 @@ def test_resolve_source_to_stream_url_wout_path(monkeypatch):
 
     text = doc_stream.stream.read().decode("utf8")
     assert text == expected_str
+
+
+def test_validate_doctags():
+    doctags = """<doctag><text><loc_42><loc_26><loc_406><loc_46>DocLayNet: A Large Human-Annotated Dataset for Document-Layout Analysis</text>
+</doctag>"""
+    assert validate_doctags(doctags) == True
