@@ -151,6 +151,32 @@ Affiliation 2</text>
 </unordered_list>
 </doctag>
     """
+    doctags = """<doctag>
+<unordered_list>
+    <list_item>item 1 of neighboring list</list_item>
+    <list_item>item 2 of neighboring list</list_item>
+    <list_item>
+        <unordered_list>
+            <list_item>item 1 of sub list</list_item>
+            <list_item>
+                <inline>
+                    <text>Here a code snippet:</text>
+                    <code><_unknown_><p>Hello world</p></code>
+                    <text>(to be displayed inline)</text>
+                </inline>
+            </list_item>
+            <list_item>
+                <inline>
+                    <text>Here a formula:</text>
+                    <formula>E=mc^2</formula>
+                    <text>(to be displayed inline)</text>
+                </inline>
+            </list_item>
+        </unordered_list>
+    </list_item>
+</unordered_list>
+</doctag>
+    """
     with open("test/data/doc/constructed_document.yaml_test.dt", "r") as f:
         doctags = f.read()
     assert validate_doctags(doctags) == True

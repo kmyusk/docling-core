@@ -172,6 +172,7 @@ def validate_doctags(input_dt: str):
     unorderedlist = Forward()
     listitem = Forward()
     listitembody = Forward()
+    inline = Forward()
 
     # Grammar
     start <<= (
@@ -181,7 +182,9 @@ def validate_doctags(input_dt: str):
     )
     page <<= OneOrMore(docitem)
     body <<= delimitedList(page, delim=Literal(f"<{DocumentToken.PAGE_BREAK.value}>"))
-    docitem <<= textitem | tableitem | pictureitem | orderedlist | unorderedlist
+    docitem <<= (
+        textitem | tableitem | pictureitem | orderedlist | unorderedlist | inline
+    )
     text_label_items = (
         [
             Literal(f"<{DocumentToken.create_token_name_from_doc_item_label(label)}>")
@@ -224,6 +227,7 @@ def validate_doctags(input_dt: str):
         + Optional(loctag + loctag + loctag + loctag)
         + Optional(tablebody)
         + Optional(Literal(TableToken.OTSL_NL.value) + caption)
+        + Optional(Literal(TableToken.OTSL_NL.value))
         + Literal("</otsl>")
     )
     caption <<= (
@@ -273,7 +277,13 @@ def validate_doctags(input_dt: str):
         + listitembody
         + Suppress(Literal(f"</{DocumentToken.LIST_ITEM.value}>"))
     )
-    listitembody <<= orderedlist | unorderedlist | textbody
+    listitembody <<= orderedlist | unorderedlist | inline | textbody
+
+    inline <<= Group(
+        Suppress(Literal(f"<{DocumentToken.INLINE.value}>"))
+        + OneOrMore(textitem)
+        + Suppress(Literal(f"</{DocumentToken.INLINE.value}>"))
+    )
 
     def is_valid(s):
         try:
