@@ -7,6 +7,7 @@
 import json
 
 from pydantic import Field
+from pyparsing import Optional
 from requests import Response
 
 from docling_core.utils.alias import AliasModel
@@ -110,4 +111,95 @@ def test_validate_doctags():
 <section_header_level_1><loc_68><loc_191><loc_190><loc_199>4.2 Language Syntax</section_header_level_1>
 </doctag>
     """
+    doctags = """<doctag>
+<title>Title of the Document</title>
+<text>Author 1
+Affiliation 1</text>
+<text>Author 2
+Affiliation 2</text>
+<section_header_level_1>1. Introduction</section_header_level_1>
+<text>This paper introduces the biggest invention ever made. ...</text>
+<otsl><fcel>Product<fcel>Years<lcel><nl><ucel><fcel>2016<fcel>2017<nl><fcel>Apple<fcel>49823<fcel>695944<nl><caption>This is the caption of table 1.</caption></otsl>
+<picture><caption>This is the caption of figure 1.</caption></picture>
+<picture><caption>This is the caption of figure 2.</caption></picture>
+<formula>E=mc^2</formula>
+<text>Here a code block:</text>
+<code><_unknown_>print("Hello world")</code>
+<text>Here a formula block:</text>
+<formula>E=mc^2</formula>
+<text>The end.</text>
+</doctag>
+    """
+    doctags = """<doctag>
+<unordered_list>
+    <list_item>list item 1</list_item>
+    <list_item>list item 2</list_item>
+    <list_item>list item 3</list_item>
+    <list_item>
+        <ordered_list>
+            <list_item>list item 3.a</list_item>
+            <list_item>list item 3.b</list_item>
+            <list_item>list item 3.c</list_item>
+            <list_item>
+                <ordered_list>
+                    <list_item>list item 3.c.i</list_item>
+                </ordered_list>
+            </list_item>
+        </ordered_list>
+    </list_item>
+    <list_item>list item 4</list_item>
+</unordered_list>
+</doctag>
+    """
+    with open("test/data/doc/constructed_document.yaml_test.dt", "r") as f:
+        doctags = f.read()
     assert validate_doctags(doctags) == True
+
+
+def test_vald():
+    from pyparsing import (
+        Forward,
+        Group,
+        OneOrMore,
+        Word,
+        alphanums,
+        Suppress,
+        ParseException,
+    )
+
+    # Define forward-declared rules for recursion
+    list_symbol = Forward()
+    list_symbol2 = Forward()
+
+    # Define a literal (word or number)
+    literal = Forward()
+    literal <<= Optional("*") + Optional("#")
+
+    # Define a list item: can be a literal, list_symbol ([])), or list_symbol2 (())
+    list_item = Forward()
+    list_item << Group(
+        Suppress("<") + (list_symbol | list_symbol2 | literal) + Suppress(">")
+    )
+
+    # Define the first list structure (square brackets)
+    list_symbol <<= Group(Suppress("[") + OneOrMore(list_item) + Suppress("]"))
+
+    # Define the second list structure (parentheses)
+    list_symbol2 <<= Group(Suppress("(") + OneOrMore(list_item) + Suppress(")"))
+
+    # Test cases
+    test_strings = [
+        "[<*> <*> <#>]",  # ✅ Simple list with []
+        "[<*#> <[<#> <*>]> <*#>]",  # ✅ Nested list with []
+        "((<*>) <*> <#>)",  # ✅ List with ()
+        "[<[<*>]> <(*)> <*>]",  # ✅ Mixed nested lists
+    ]
+
+    for test in test_strings:
+        try:
+            print(test, "=>", list_symbol.parseString(test).asList())
+        except ParseException:
+            try:
+                print(test, "=>", list_symbol2.parseString(test).asList())
+            except ParseException as e:
+                print(f"Parse error: {e}")

@@ -20,6 +20,8 @@ from pyparsing import (
     OneOrMore,
     Optional,
     delimitedList,
+    Group,
+    Suppress,
 )
 
 from docling_core.types.doc import tokens
@@ -113,22 +115,6 @@ def validate_datetime(v, handler):
 
 
 def validate_doctags(input_dt: str):
-    content_symbol = "Content"
-    terminals = set(DocumentToken.get_special_tokens())
-    terminals.add(content_symbol)
-
-    text_labels = [
-        "caption",
-        "checkbox_selected",
-        "checkbox_unselected",
-        "footnote",
-        "page_footer",
-        "page_header",
-        "paragraph",
-        "reference",
-        "text",
-    ]
-
     def tokenize_input(text: str):
         token_regex = re.compile(
             r"|".join(map(re.escape, sorted(list(terminals), key=len, reverse=True)))
@@ -146,6 +132,25 @@ def validate_doctags(input_dt: str):
                 tokens.append(content_symbol)
         return tokens
 
+    content_symbol = "Content"
+    terminals = set(DocumentToken.get_special_tokens())
+    terminals.add(content_symbol)
+
+    text_labels = [
+        "caption",
+        "checkbox_selected",
+        "checkbox_unselected",
+        "footnote",
+        "page_footer",
+        "page_header",
+        "paragraph",
+        "reference",
+        "text",
+        "formula",
+        "title",
+    ]
+
+    # Non-terminals
     start = Forward()
     body = Forward()
     docitem = Forward()
@@ -161,7 +166,14 @@ def validate_doctags(input_dt: str):
     pictureitem = Forward()
     picclass = Forward()
     smiles = Forward()
+    codelang = Forward()
+    codebody = Forward()
+    orderedlist = Forward()
+    unorderedlist = Forward()
+    listitem = Forward()
+    listitembody = Forward()
 
+    # Grammar
     start <<= (
         Literal(f"<{DocumentToken.DOCUMENT.value}>")
         + body
@@ -169,24 +181,36 @@ def validate_doctags(input_dt: str):
     )
     page <<= OneOrMore(docitem)
     body <<= delimitedList(page, delim=Literal(f"<{DocumentToken.PAGE_BREAK.value}>"))
-    docitem <<= textitem | tableitem | pictureitem
-    text_label_items = [
-        Literal(f"<{DocumentToken.create_token_name_from_doc_item_label(label)}>")
-        + Optional(textbody)
-        + Literal(f"</{DocumentToken.create_token_name_from_doc_item_label(label)}>")
-        for label in text_labels
-    ] + [
-        Literal(f"<{tokens._SECTION_HEADER_PREFIX}{i}>")
-        + Optional(textbody)
-        + Literal(f"</{tokens._SECTION_HEADER_PREFIX}{i}>")
-        for i in range(6)
-    ]
-    textitem <<= MatchFirst(text_label_items)
-    textbody <<= (
-        loctag + loctag + loctag + loctag + Literal(content_symbol)
-        | loctag + loctag + loctag + loctag
-        | Literal(content_symbol)
+    docitem <<= textitem | tableitem | pictureitem | orderedlist | unorderedlist
+    text_label_items = (
+        [
+            Literal(f"<{DocumentToken.create_token_name_from_doc_item_label(label)}>")
+            + textbody
+            + Literal(
+                f"</{DocumentToken.create_token_name_from_doc_item_label(label)}>"
+            )
+            for label in text_labels
+        ]
+        + [
+            Literal(f"<{tokens._SECTION_HEADER_PREFIX}{i}>")
+            + textbody
+            + Literal(f"</{tokens._SECTION_HEADER_PREFIX}{i}>")
+            for i in range(6)
+        ]
+        + [
+            Literal(f"<{DocumentToken.CODE.value}>")
+            + codebody
+            + Literal(f"</{DocumentToken.CODE.value}>")
+        ]
     )
+    textitem <<= MatchFirst(text_label_items)
+    textbody <<= Optional(loctag + loctag + loctag + loctag) + Optional(
+        Literal(content_symbol)
+    )
+    codebody <<= Optional(loctag + loctag + loctag + loctag) + Optional(
+        codelang + Literal(content_symbol)
+    )
+    codelang <<= MatchFirst([Literal(lang.value) for lang in tokens._CodeLanguageToken])
     loctags = list(
         map(
             lambda x: Literal(x),
@@ -205,7 +229,8 @@ def validate_doctags(input_dt: str):
     caption <<= (
         Literal("<caption>")
         + Optional(loctag + loctag + loctag + loctag)
-        + Literal("Content</caption>")
+        + Optional(Literal(content_symbol))
+        + Literal("</caption>")
     )
     tablebody <<= row + Optional(Literal(TableToken.OTSL_NL.value) + tablebody)
     row <<= OneOrMore(cell)
@@ -224,10 +249,31 @@ def validate_doctags(input_dt: str):
         + Optional(caption)
         + Literal(f"</{DocumentToken.PICTURE.value}>")
     )
-
     picclass <<= MatchFirst(
-        [pclass.value for pclass in tokens._PictureClassificationToken]
+        [Literal(pclass.value) for pclass in tokens._PictureClassificationToken]
     )
+    smiles <<= (
+        Literal(f"<{DocumentToken.SMILES.value}>")
+        + Literal(content_symbol)
+        + Literal(f"</{DocumentToken.SMILES.value}>")
+    )
+
+    orderedlist <<= Group(
+        Suppress(Literal(f"<{DocumentToken.ORDERED_LIST.value}>"))
+        + OneOrMore(listitem)
+        + Suppress(Literal(f"</{DocumentToken.ORDERED_LIST.value}>"))
+    )
+    unorderedlist <<= Group(
+        Suppress(Literal(f"<{DocumentToken.UNORDERED_LIST.value}>"))
+        + OneOrMore(listitem)
+        + Suppress(Literal(f"</{DocumentToken.UNORDERED_LIST.value}>"))
+    )
+    listitem << Group(
+        Suppress(Literal(f"<{DocumentToken.LIST_ITEM.value}>"))
+        + listitembody
+        + Suppress(Literal(f"</{DocumentToken.LIST_ITEM.value}>"))
+    )
+    listitembody <<= orderedlist | unorderedlist | textbody
 
     def is_valid(s):
         try:
@@ -240,5 +286,7 @@ def validate_doctags(input_dt: str):
     def preprocess(input_dt):
         return "".join(tokenize_input("".join(input_dt.split())))
 
+    listitembody.setDebug()
     processed_input = preprocess(input_dt)
+
     return is_valid(processed_input)
